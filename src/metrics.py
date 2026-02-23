@@ -74,24 +74,51 @@ def compute_reliability_score(df: pd.DataFrame) -> pd.DataFrame:
     # Penalties (weights can be tuned later)
     # Interpreting densities as 0..1. We map them to points.
     fail_penalty = 60 * df["had_fail"]
-    warn_penalty = 25 * df["warning_density"]
-    battery_penalty = 10 * df["battery_sag_pct"]
-    link_penalty = 10 * df["link_drop_pct"]
-    temp_penalty = 10 * df["overheat_pct"]
+    warn_penalty = 40 * df["warning_density"]
+    battery_penalty = 20 * df["battery_sag_pct"]
+    link_penalty = 15 * df["link_drop_pct"]
+    temp_penalty = 15 * df["overheat_pct"]
 
     df["reliability_score"] = 100 - (fail_penalty + warn_penalty + battery_penalty + link_penalty + temp_penalty)
     df["reliability_score"] = df["reliability_score"].clip(0, 100)
-
-    # Risk classes (simple, readable thresholds)
-    df["risk_class"] = pd.cut(
-        df["reliability_score"],
-        bins=[-0.1, 70, 85, 100.1],
-        labels=["HIGH", "MEDIUM", "LOW"],
-        include_lowest=True,
-    )
-
     return df
 
+def assign_risk_by_percentiles(
+    df: pd.DataFrame,
+    high_pct: float = 0.20,
+    medium_pct: float = 0.30,
+    score_col: str = "reliability_score",
+) -> pd.DataFrame:
+    """
+    Assign risk classes by score percentiles.
+
+    - HIGH  : bottom `high_pct` fraction (lowest scores)
+    - MEDIUM: next `medium_pct` fraction
+    - LOW   : remaining top fraction
+
+    Example:
+      high_pct=0.20, medium_pct=0.30
+      -> HIGH bottom 20%, MEDIUM 20-50%, LOW top 50%
+    """
+    if high_pct <= 0 or medium_pct <= 0 or (high_pct + medium_pct) >= 1:
+        raise ValueError("high_pct and medium_pct must be >0 and sum to < 1")
+
+    df = df.copy()
+    scores = df[score_col].astype(float)
+
+    q_high = scores.quantile(high_pct)                 # bottom threshold
+    q_med = scores.quantile(high_pct + medium_pct)     # medium/low threshold
+
+    # Default LOW
+    df["risk_class"] = "LOW"
+    df.loc[scores <= q_med, "risk_class"] = "MEDIUM"
+    df.loc[scores <= q_high, "risk_class"] = "HIGH"
+
+    # Store thresholds for debugging/README
+    df["risk_threshold_high"] = float(q_high)
+    df["risk_threshold_medium"] = float(q_med)
+
+    return df
 
 def print_summary(df: pd.DataFrame) -> None:
     n = len(df)
@@ -110,6 +137,10 @@ def print_summary(df: pd.DataFrame) -> None:
 
     print("\nRisk class distribution:")
     print(df["risk_class"].value_counts(dropna=False))
+
+    print("\nCalibrated thresholds:")
+    print("HIGH <= ", round(df["risk_threshold_high"].iloc[0], 3))
+    print("MEDIUM <= ", round(df["risk_threshold_medium"].iloc[0], 3))
 
     print("\nTop 10 worst sessions (lowest score):")
     cols = [
@@ -133,6 +164,12 @@ def main():
     telemetry_df, sessions_df = load_tables()
     session_metrics = compute_session_metrics(telemetry_df, sessions_df)
     session_metrics = compute_reliability_score(session_metrics)
+
+    session_metrics = assign_risk_by_percentiles(
+        session_metrics,
+        high_pct=0.20,
+        medium_pct=0.30,
+    )
 
     # Save for future dashboard
     session_metrics.to_csv(OUT_SESSIONS_CSV, index=False)
