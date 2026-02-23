@@ -30,7 +30,56 @@ This project builds a minimal internal reliability analytics system to simulate 
 ---
 
 # 🏗 Architecture
+## 🧱 System Overview
 
+```
++------------------------------+
+|      Synthetic Layer         |
+|  src/generate_logs.py        |
+|  - session profiles          |
+|  - degradation streaks       |
+|  - failure injection         |
++--------------+---------------+
+               |
+               v
++------------------------------+
+|        Raw Data Layer        |
+|        data/raw/*.csv        |
+|  - per-second telemetry      |
+|  - OK / WARN / FAIL events   |
++--------------+---------------+
+               |
+               v
++------------------------------+
+|            ETL               |
+|        src/etl.py            |
+|  - normalization             |
+|  - idempotent rebuild        |
++--------------+---------------+
+               |
+               v
++------------------------------+
+|       Storage Layer          |
+|  data/processed/telemetry.db |
+|  - telemetry table           |
+|  - sessions table            |
++--------------+---------------+
+               |
+               v
++------------------------------+
+|      Analytics Layer         |
+|        src/metrics.py        |
+|  - multi-factor scoring      |
+|  - percentile calibration    |
+|  - risk classification       |
++--------------+---------------+
+               |
+               v
++------------------------------+
+|       Visualization          |
+|      Streamlit (next)        |
++------------------------------+
+```
 ## Data Flow
 
 
