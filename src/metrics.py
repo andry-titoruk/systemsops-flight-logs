@@ -90,15 +90,11 @@ def assign_risk_by_percentiles(
     score_col: str = "reliability_score",
 ) -> pd.DataFrame:
     """
-    Assign risk classes by score percentiles.
+    Robust percentile risk assignment using ranks (works even when many scores are identical).
 
     - HIGH  : bottom `high_pct` fraction (lowest scores)
     - MEDIUM: next `medium_pct` fraction
-    - LOW   : remaining top fraction
-
-    Example:
-      high_pct=0.20, medium_pct=0.30
-      -> HIGH bottom 20%, MEDIUM 20-50%, LOW top 50%
+    - LOW   : remaining
     """
     if high_pct <= 0 or medium_pct <= 0 or (high_pct + medium_pct) >= 1:
         raise ValueError("high_pct and medium_pct must be >0 and sum to < 1")
@@ -106,17 +102,27 @@ def assign_risk_by_percentiles(
     df = df.copy()
     scores = df[score_col].astype(float)
 
-    q_high = scores.quantile(high_pct)                 # bottom threshold
-    q_med = scores.quantile(high_pct + medium_pct)     # medium/low threshold
+    n = len(df)
+    n_high = int(round(n * high_pct))
+    n_med = int(round(n * medium_pct))
 
-    # Default LOW
+    # Safety so we always have at least 1 in HIGH/MEDIUM when n is small
+    n_high = max(1, n_high)
+    n_med = max(1, n_med)
+
+    # sort by score ascending (worst first)
+    order = scores.sort_values(ascending=True).index.tolist()
+
+    high_idx = set(order[:n_high])
+    med_idx = set(order[n_high:n_high + n_med])
+
     df["risk_class"] = "LOW"
-    df.loc[scores <= q_med, "risk_class"] = "MEDIUM"
-    df.loc[scores <= q_high, "risk_class"] = "HIGH"
+    df.loc[list(med_idx), "risk_class"] = "MEDIUM"
+    df.loc[list(high_idx), "risk_class"] = "HIGH"
 
-    # Store thresholds for debugging/README
-    df["risk_threshold_high"] = float(q_high)
-    df["risk_threshold_medium"] = float(q_med)
+    # thresholds for debug (actual boundary scores in this конкретний run)
+    df["risk_threshold_high"] = float(scores.loc[order[n_high - 1]])
+    df["risk_threshold_medium"] = float(scores.loc[order[min(n_high + n_med - 1, n - 1)]])
 
     return df
 
@@ -138,9 +144,10 @@ def print_summary(df: pd.DataFrame) -> None:
     print("\nRisk class distribution:")
     print(df["risk_class"].value_counts(dropna=False))
 
-    print("\nCalibrated thresholds:")
-    print("HIGH <= ", round(df["risk_threshold_high"].iloc[0], 3))
-    print("MEDIUM <= ", round(df["risk_threshold_medium"].iloc[0], 3))
+    if "risk_threshold_high" in df.columns and len(df):
+        print("\nCalibrated thresholds:")
+        print("HIGH <= ", round(float(df["risk_threshold_high"].iloc[0]), 3))
+        print("MEDIUM <= ", round(float(df["risk_threshold_medium"].iloc[0]), 3))
 
     print("\nTop 10 worst sessions (lowest score):")
     cols = [
