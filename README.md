@@ -1,110 +1,230 @@
-# SystemsOps Flight Logs
+# 🚀 SystemsOps Flight Logs
 
-Synthetic telemetry → ETL → reliability metrics → dashboard.
+Synthetic telemetry → ETL → reliability analytics → calibrated risk scoring → dashboard (next milestone)
 
-A small systems-oriented reliability analytics pipeline built on synthetic drone telemetry data.
+A systems-oriented reliability analytics pipeline built on synthetic drone telemetry data.  
+The project simulates how raw flight logs become structured engineering insights.
 
 ---
 
-## 🎯 Problem
+# 🎯 Problem
 
 Flight test sessions generate large volumes of telemetry logs.  
-Raw CSV files are hard to analyze directly and do not provide structured insight into:
+Raw CSV files alone do not provide structured insight into:
 
 - Failure rate
-- Time to first failure
+- Time to first failure (MTTF)
 - Warning density
-- Reliability bottlenecks
-- Risk patterns across sessions
+- Degradation patterns
+- Risk stratification across sessions
 
-This project builds a minimal internal reliability analytics system that:
+Engineering teams need structured reliability metrics to:
 
-1. Generates synthetic telemetry sessions
-2. Normalizes raw logs via ETL
-3. Stores structured data in SQLite
-4. Enables metric computation and future dashboarding
+- Detect weak subsystems
+- Prioritize engineering effort
+- Quantify operational risk
+- Improve survivability and robustness
 
----
-
-## 🏗 Architecture
-
-### Data Layers
-
-| Layer | Description |
-|-------|------------|
-| `data/raw` | Synthetic per-session telemetry logs |
-| `data/processed` | Normalized SQLite database |
-| `src/generate_logs.py` | Telemetry generator |
-| `src/etl.py` | Raw → structured database |
-| `src/metrics.py` | Reliability metrics layer (next milestone) |
-| `src/dashboard.py` | Visualization layer (future milestone) |
+This project builds a minimal internal reliability analytics system to simulate that workflow.
 
 ---
 
-## 📊 Current Capabilities
+# 🏗 Architecture
 
-✔ Generate synthetic telemetry sessions  
-✔ Normalize logs into structured SQLite database  
-✔ Create two core tables:
+## Data Flow
+
+
+Synthetic Generator
+↓
+Raw CSV logs (data/raw)
+↓
+ETL normalization
+↓
+SQLite database (data/processed/telemetry.db)
+↓
+Session-level reliability metrics
+↓
+Calibrated risk classification
+↓
+Dashboard (next milestone)
+
+
+---
+
+# 📊 Current Capabilities
+
+## ✅ Synthetic telemetry generator
+
+Generates multiple session profiles:
+
+- **Normal**
+- **Degraded**
+- **Failure-prone**
+
+Simulates:
+
+- Battery sag
+- Link drops
+- Thermal overload
+- Random subsystem failures
+
+Each session includes:
+- Per-second telemetry
+- Event tagging (OK / WARN / FAIL)
+- Failure reason attribution
+
+---
+
+## ✅ ETL → SQLite
+
+Normalizes raw logs into:
 
 ### `telemetry`
 - Per-second flight telemetry
-- Events (OK / WARN / FAIL)
-- Link, voltage, temperature, CPU load
+- Events
+- Voltage, temperature, link quality, CPU load
 
 ### `sessions`
 - One row per session
 - Duration
 - Failure flag
 - Failure reason
-- First failure timestamp
+- Time to first failure
+
+ETL is idempotent and safe to re-run.
 
 ---
 
-## 🧠 Why This Matters
+## ✅ Multi-Factor Reliability Scoring
 
-In real-world robotics / miltech systems:
+Each session receives a composite score:
 
-- Raw logs are useless without structure.
-- Reliability metrics drive engineering decisions.
-- Bottleneck detection improves survivability and robustness.
-- Product decisions require quantitative telemetry analysis.
 
-This project simulates that workflow.
+Score = 100
+- 60 × had_fail
+- 40 × warning_density
+- 20 × battery_sag_pct
+- 15 × link_drop_pct
+- 15 × overheat_pct
+
+
+Where:
+
+- `warning_density` = WARN time / total session time
+- `battery_sag_pct` = time under safe voltage threshold
+- `link_drop_pct` = time below link quality threshold
+- `overheat_pct` = time above temperature threshold
+
+Scores are clipped to `[0, 100]`.
 
 ---
 
-## ⚙ Stack
+## ✅ Percentile-Based Risk Calibration
+
+Instead of fixed thresholds, risk classes are calibrated dynamically:
+
+- **HIGH**  → bottom 20% of sessions
+- **MEDIUM** → next 30%
+- **LOW** → top 50%
+
+This ensures robust stratification even when score distributions shift.
+
+The system prints calibrated score boundaries at runtime.
+
+---
+
+# 📈 Example Output
+
+
+Sessions: 30
+Failures: 4 (13.33%)
+Mean time to first failure: 274.2 s
+
+Risk class distribution:
+HIGH: 6
+MEDIUM: 9
+LOW: 15
+
+
+Top worst sessions include degradation metrics and root causes.
+
+---
+
+# 🧠 Engineering Insight
+
+This pipeline demonstrates:
+
+- Structured telemetry normalization
+- Reliability metric engineering
+- Multi-factor risk modeling
+- Dynamic percentile calibration
+- Separation of data layer vs scoring logic
+
+The architecture mirrors real-world robotics / defense telemetry workflows.
+
+---
+
+# ⚙ Stack
 
 - Python
 - pandas
 - SQLite
-- matplotlib (future)
-- Streamlit (future)
+- NumPy
+- (Next) Streamlit
 
 ---
 
-## 🚀 How to Run
+# 🚀 How to Run
 
-### 1. Generate synthetic logs
+### 1️⃣ Generate synthetic logs
+
 ```bash
 python -m src.generate_logs
 ```
-### 2. Run ETL
+### 2️⃣ Run ETL
 ```bash
 python -m src.etl
 ```
-
 Database will be created at:
-`data/processed/telemetry.db`
+```bash
+data/processed/telemetry.db
+```
+
+### 3️⃣ Compute reliability metrics
+```bash
+python -m src.metrics
+```
+Per-session metrics will be exported to:
+
+```bash
+data/processed/metrics_sessions.csv
+```
+🔜 Next Milestone
+
+- Interactive Streamlit dashboard:
+- KPI cards (Failure rate, MTTF)
+- Reliability score histogram
+- Risk distribution visualization
+- Session filtering
+- Telemetry drill-down per session
+
+# 📌 Why This Matters
+
+In real-world robotics and miltech systems:
+
+Raw logs are useless without structure.
+
+Reliability metrics drive engineering prioritization.
+
+Risk stratification informs mission planning.
+
+Data-driven telemetry analysis improves survivability.
+
+This project simulates that decision-support layer.
+
+👤 Author
+
+Andrii Titoruk
+Data-driven performance & systems analyst.
 
 ---
-
-## 🗺 Roadmap
-
-- [x] Synthetic telemetry generator
-- [x] ETL → SQLite
-- [ ] Reliability metrics computation
-- [ ] Risk scoring
-- [ ] Interactive dashboard
-- [ ] Decision log & engineering prioritization layer
