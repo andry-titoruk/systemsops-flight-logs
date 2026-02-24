@@ -125,7 +125,7 @@ session_options = filtered.sort_values("reliability_score")["session_id"].unique
 session_id = st.selectbox("Pick a session", options=session_options)
 
 # Session summary card
-row = df[df["session_id"] == session_id].iloc[0]
+row = filtered[filtered["session_id"] == session_id].iloc[0]
 
 st.markdown(
     f"""
@@ -168,24 +168,129 @@ if telemetry.empty:
 fail_rows = telemetry[telemetry["event"] == "FAIL"]
 fail_t = int(fail_rows["t_s"].min()) if not fail_rows.empty else None
 
-# Time window slider
+# --- quick controls (sidebar, vertical) ---
+st.sidebar.subheader("Drilldown controls")
+
+# ✅ INIT session state BEFORE widget creation
+if "auto_focus" not in st.session_state:
+    st.session_state["auto_focus"] = False
+
+focus_span = st.sidebar.number_input(
+    "Focus span (± seconds)",
+    min_value=10, max_value=400, value=60, step=10
+)
+
+auto_focus = st.sidebar.checkbox(
+    "Auto-focus window around FAIL",
+    disabled=(fail_t is None),
+    key="auto_focus",
+)
+
+# якщо нема FAIL — просто ігноруємо значення чекбокса в логіці
+auto_focus_effective = auto_focus and (fail_t is not None)
+
+show_only_important = st.sidebar.checkbox(
+    "Show only WARN/FAIL rows in table",
+    value=True
+)
+
+# --- Time window slider (clean + predictable) ---
 t_min = int(telemetry["t_s"].min())
 t_max = int(telemetry["t_s"].max())
+
+# --- state keys ---
+window_key = f"window_{session_id}"
+
+# Ensure per-session window exists in state
+if window_key not in st.session_state:
+    st.session_state[window_key] = (t_min, t_max)
+
+def compute_focus_window() -> tuple[int, int]:
+    span = int(focus_span)
+    if fail_t is not None:
+        return (max(t_min, fail_t - span), min(t_max, fail_t + span))
+    # no FAIL -> focus end of session
+    return (max(t_min, t_max - 2 * span), t_max)
+
+# If auto-focus is ON, keep window synced to focus window
+if auto_focus and (window_key in st.session_state):
+    st.session_state[window_key] = compute_focus_window()
+
+def jump_callback():
+    if fail_t is not None:
+        st.session_state[window_key] = compute_focus_window()
+
+st.sidebar.button(
+    "🎯 Jump to FAIL",
+    disabled=(fail_t is None),
+    use_container_width=True,
+    on_click=jump_callback,
+)
 
 window = st.slider(
     "Time window (seconds)",
     min_value=t_min,
     max_value=t_max,
-    value=(t_min, t_max),
+    value=st.session_state[window_key],   # ← ОСЬ ЦЕ ПРОБЛЕМА
+    key=window_key,
 )
 
 telemetry_win = telemetry[(telemetry["t_s"] >= window[0]) & (telemetry["t_s"] <= window[1])].copy()
 
+st.markdown("### Event timeline")
+
+# Create a simple categorical timeline (one bar per second)
+# We map events to a category: OK / WARN / FAIL
+def event_bucket(e: str) -> str:
+    if e == "FAIL":
+        return "FAIL"
+    if str(e).startswith("WARN"):
+        return "WARN"
+    return "OK"
+
+timeline = telemetry_win[["t_s", "event"]].copy()
+timeline["bucket"] = timeline["event"].map(event_bucket)
+
+fig_tl = px.scatter(
+    timeline,
+    x="t_s",
+    y=["event"] * len(timeline),   # single-row “stripe”
+    color="bucket",
+    hover_data=["event"],
+)
+fig_tl.update_traces(marker=dict(size=8))
+fig_tl.update_layout(
+    height=120,
+    yaxis_title="",
+    xaxis_title="t_s",
+    yaxis=dict(showticklabels=False),
+    legend_title="",
+    margin=dict(l=10, r=10, t=10, b=10),
+)
+
+# Add FAIL start marker if inside window
+if fail_t is not None and window[0] <= fail_t <= window[1]:
+    fig_tl.add_vline(x=fail_t, line_dash="dot", annotation_text="FAIL start")
+
+st.plotly_chart(fig_tl, use_container_width=True)
+
 # Helper: add threshold + fail marker
 def add_threshold_and_fail_marker(fig: go.Figure, y_threshold: float, x_fail: int | None, name: str):
-    fig.add_hline(y=y_threshold, line_dash="dash", annotation_text=name, annotation_position="top left")
+    fig.add_hline(
+        y=y_threshold,
+        line_dash="dash",
+        line_color="#ff4da6",   # ← pink
+        annotation_text=name,
+        annotation_position="top left"
+    )
     if x_fail is not None and window[0] <= x_fail <= window[1]:
-        fig.add_vline(x=x_fail, line_dash="dot", annotation_text="FAIL start", annotation_position="top right")
+        fig.add_vline(
+            x=x_fail,
+            line_dash="dot",
+            line_color="#ff4da6",   # ← pink
+            annotation_text="FAIL start",
+            annotation_position="top right"
+        )
 
 # Voltage chart
 st.markdown("### Voltage (V)")
@@ -214,8 +319,18 @@ st.dataframe(event_counts, use_container_width=True, hide_index=True)
 # Telemetry table (slice)
 st.markdown("### Raw telemetry (slice)")
 st.caption("Tip: narrow the time window to inspect around WARN/FAIL transition.")
-st.dataframe(
-    telemetry_win[["t_s", "event", "voltage_v", "temp_c", "link_q", "cpu_load_pct", "current_a", "fail_reason"]],
-    use_container_width=True,
-    hide_index=True,
+
+table_df = telemetry_win[["t_s", "event", "voltage_v", "temp_c", "link_q", "cpu_load_pct", "current_a", "fail_reason"]].copy()
+if show_only_important:
+    table_df = table_df[table_df["event"].ne("OK")]
+
+st.dataframe(table_df, use_container_width=True, hide_index=True)
+
+# Export selected window
+csv_bytes = table_df.to_csv(index=False).encode("utf-8")
+st.download_button(
+    "⬇️ Download selected window as CSV",
+    data=csv_bytes,
+    file_name=f"{session_id}_telemetry_window_{window[0]}_{window[1]}.csv",
+    mime="text/csv",
 )
