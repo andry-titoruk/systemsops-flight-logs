@@ -1,6 +1,6 @@
 # 🚀 SystemsOps Flight Logs
 
-Synthetic telemetry → ETL → reliability analytics → calibrated risk scoring → dashboard (next milestone)
+Synthetic telemetry → ETL → reliability analytics → calibrated risk scoring → dashboard
 
 A systems-oriented reliability analytics pipeline built on synthetic drone telemetry data.  
 The project simulates how raw flight logs become structured engineering insights.
@@ -76,8 +76,10 @@ This project builds a minimal internal reliability analytics system to simulate 
                |
                v
 +------------------------------+
-|       Visualization          |
-|      Streamlit (next)        |
+|        Visualization         |
+|  Streamlit dashboard         |
+|  (interactive reliability    |
+|   analytics)                 |
 +------------------------------+
 ```
 ## Data Flow
@@ -95,7 +97,7 @@ Session-level reliability metrics
 ↓
 Calibrated risk classification
 ↓
-Dashboard (next milestone)
+Dashboard
 
 
 ---
@@ -219,7 +221,8 @@ The architecture mirrors real-world robotics / defense telemetry workflows.
 - pandas
 - SQLite
 - NumPy
-- (Next) Streamlit
+- Streamlit
+- Plotly
 
 ---
 
@@ -248,14 +251,32 @@ Per-session metrics will be exported to:
 ```bash
 data/processed/metrics_sessions.csv
 ```
-🔜 Next Milestone
+# 📊 Dashboard Capabilities
 
-- Interactive Streamlit dashboard:
-- KPI cards (Failure rate, MTTF)
-- Reliability score histogram
-- Risk distribution visualization
-- Session filtering
-- Telemetry drill-down per session
+The Streamlit dashboard provides:
+
+## 🔹 KPI Layer
+- Total sessions
+- Failure rate
+- Mean time to first failure (MTTF)
+- Worst reliability score
+
+## 🔹 Root Cause Analysis
+- Failure reason distribution (%)
+- Median time-to-first-fail by reason
+- Correlation of risk features with failure
+
+## 🔹 System Monitoring
+- Rolling failure rate (7-session window)
+- System stability visualization
+
+## 🔹 Telemetry Drilldown
+- Per-session selection
+- Time window control
+- Auto-focus around FAIL
+- Event timeline
+- Threshold overlays
+- CSV export of selected window
 
 # 📌 Why This Matters
 
