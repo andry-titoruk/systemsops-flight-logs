@@ -75,6 +75,120 @@ c5.metric("Worst score", "N/A" if total == 0 else f"{filtered['reliability_score
 
 st.divider()
 
+# =============================================================================
+# ROOT CAUSE SUMMARY
+# =============================================================================
+st.subheader("🧠 Failure Root Cause Overview")
+
+if total > 0:
+
+    failed_sessions = filtered[filtered["had_fail"] == 1].copy()
+
+    if not failed_sessions.empty:
+
+        # --- Fail reason distribution ---
+        fail_dist = (
+            failed_sessions["fail_reason"]
+            .value_counts(normalize=True)
+            .reset_index()
+        )
+        fail_dist.columns = ["fail_reason", "share"]
+        fail_dist["share_pct"] = fail_dist["share"] * 100
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            st.markdown("**Failure reason distribution (%)**")
+            fig_fail = px.bar(
+                fail_dist,
+                x="fail_reason",
+                y="share_pct",
+                text="share_pct"
+            )
+            fig_fail.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+            fig_fail.update_layout(yaxis_title="% of failures")
+            st.plotly_chart(fig_fail, use_container_width=True)
+
+        with c2:
+            st.markdown("**Median time-to-first-fail by reason (s)**")
+            mttf_by_reason = (
+                failed_sessions
+                .groupby("fail_reason")["time_to_first_fail_s"]
+                .median()
+                .reset_index()
+            )
+
+            fig_mttf = px.bar(
+                mttf_by_reason,
+                x="fail_reason",
+                y="time_to_first_fail_s"
+            )
+            fig_mttf.update_layout(yaxis_title="Median seconds to FAIL")
+            st.plotly_chart(fig_mttf, use_container_width=True)
+
+        # --- Correlation snapshot ---
+        st.markdown("**Correlation with failure (Pearson)**")
+
+        corr_features = [
+            "battery_sag_pct",
+            "link_drop_pct",
+            "overheat_pct",
+            "warning_density",
+        ]
+
+        corr_df = filtered[corr_features + ["had_fail"]].corr()["had_fail"].drop("had_fail")
+        corr_df = corr_df.reset_index()
+        corr_df.columns = ["feature", "correlation"]
+
+        fig_corr = px.bar(
+            corr_df,
+            x="feature",
+            y="correlation"
+        )
+        fig_corr.update_layout(yaxis_title="Correlation with FAIL")
+        st.plotly_chart(fig_corr, use_container_width=True)
+
+    else:
+        st.info("No failed sessions in current filter.")
+
+# =============================================================================
+# SYSTEM TREND (Minimal C)
+# =============================================================================
+st.subheader("📈 System Reliability Trend")
+
+if len(filtered) > 5:
+
+    trend_df = filtered.copy().sort_values("session_id").reset_index(drop=True)
+
+    # Ensure numeric index
+    trend_df["session_index"] = trend_df.index + 1
+
+    # Rolling failure rate (window=7 sessions)
+    window_size = 7
+    trend_df["rolling_fail_rate"] = (
+        trend_df["had_fail"]
+        .rolling(window=window_size, min_periods=1)
+        .mean()
+    )
+
+    fig_trend = px.line(
+        trend_df,
+        x="session_index",
+        y="rolling_fail_rate",
+    )
+
+    fig_trend.update_layout(
+        yaxis_title="Rolling Failure Rate",
+        xaxis_title="Session Index",
+    )
+
+    st.plotly_chart(fig_trend, use_container_width=True)
+
+    st.caption(f"Rolling window size: {window_size} sessions")
+
+else:
+    st.info("Not enough sessions to compute trend.")
+
 # ----- charts -----
 left, right = st.columns(2)
 
